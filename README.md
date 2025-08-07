@@ -118,7 +118,8 @@ function readPDF2LLM(name, filePath) {
 
 > Neste benchmark, apenas comparei algumas libs existentes com funcionalidade de extração de texto em NodeJS:
 
-![benchmark libs extracao texto](./imgs/benchmark_text)
+![benchmark libs extracao texto](imgs/benchmark_text.png)
+
 
 # License
 
