@@ -110,25 +110,15 @@ jobs:
         with:
           name: prebuilds-linux-x64
           path: prebuilds/
-      - name: Normalize prebuilds path
+
+      - name: Show prebuilds tree
         shell: bash
         run: |
           set -euxo pipefail
-          shopt -s nullglob dotglob globstar
-          rm -rf prebuilds
-          mkdir -p prebuilds
-          found=0
-          for src in prebuilds-agg/**/prebuilds; do
-            [ -d "$src" ] || continue
-            echo "Mesclando de: $src"
-            cp -a "$src"/. prebuilds/
-            found=1
-          done
-          [ $found -eq 1 ] || { echo "Nenhum 'prebuilds/' encontrado nos artifacts"; find prebuilds-agg -maxdepth 3 -type d -name prebuilds -print; exit 1; }
-          echo "::group::Final tree ./prebuilds"
+          echo "::group::./prebuilds"
           find prebuilds -maxdepth 3 -type f -print
           echo "::endgroup::"
-
+ 
       - name: Force-include prebuilds (npmignore)
         shell: bash
         run: |
