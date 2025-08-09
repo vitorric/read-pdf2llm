@@ -110,6 +110,23 @@ jobs:
         with:
           name: prebuilds-linux-x64
           path: .
+        
+      - name: Force-include prebuilds (npmignore)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          # Cria .npmignore que ignora lixo… mas **permite** prebuilds/**
+          {
+            echo "node_modules"
+            echo ".git"
+            echo ".github"
+            echo "*.log"
+            echo "npm-debug.log*"
+            echo
+            echo "!prebuilds/**"
+          } > .npmignore
+          echo "--- .npmignore ---"
+          cat .npmignore
 
       - name: Normalize prebuilds path
         shell: bash
@@ -126,8 +143,10 @@ jobs:
 
       - name: Show tree
         run: ls -R
+
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
+
       - name: Assert prebuilds in tarball
         shell: bash
         run: |
