@@ -34,7 +34,12 @@
     "prebuild": "^13.0.1"
   },
   "overrides": {
-    "prebuild/node-gyp": "^10.2.0"
+    "prebuild": {
+      "node-gyp": "^10.2.0"
+    },
+    "prebuild-install": {
+      "node-gyp": "^10.2.0"
+    }
   },
   "files": [
     "index.js",
