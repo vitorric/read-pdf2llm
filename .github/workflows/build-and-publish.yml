@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: SO deps (iguais ao seu Dockerfile)
+        shell: bash
         run: |
           set -euxo pipefail
           apt-get update && apt-get install -y \
