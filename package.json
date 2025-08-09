@@ -20,9 +20,7 @@
   "scripts": {
     "install": "node-gyp-build",
     "build": "node-gyp configure build",
-    "prebuild": "prebuild --napi --strip",
-    "fetch:vendor": "node tools/fetch-vendor.js",
-    "prepublishOnly": "npm run prebuild"
+    "prebuild": "prebuild --napi --strip"
   },
   "dependencies": {
     "node-gyp-build": "^4.8.0",

@@ -8,63 +8,57 @@ on:
     branches: [ "feat/build-addon" ]    # roda em TODO push
     tags:     [ "v*.*.*" ] # e também quando criar tag de release
   workflow_dispatch: {}
-
 jobs:
   prebuild:
-    strategy:
-      fail-fast: false
-      matrix:
-        #os:   [ubuntu-latest, macos-latest, windows-latest]
-        #node: [18, 20, 22]
-        os:   [ubuntu-latest]
-        node: [20]
-    runs-on: ${{ matrix.os }}
-
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Python 3.10 (for node-gyp tools)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
 
-      - name: Use Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
-          check-latest: true
+          node-version: 20
 
-      - name: Fetch vendor bundle for this runner
-        run: npm run fetch:vendor
-        env:
-          REPO_SLUG: ${{ github.repository }}
-          VENDOR_RELEASE_TAG: vendor-v1   # troque se usou outro nome
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Instala dependências de runtime/build no RUNNER (sem vendor)
+      - name: Install system deps (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential python3 \
+            tesseract-ocr libtesseract-dev libleptonica-dev \
+            libgif7 libpng16-16 libjpeg-turbo8 libtiff5 libwebp7 libopenjp2-7 zlib1g \
+            patchelf
 
       - name: Install deps (no scripts)
-        run: npm install --ignore-scripts
-        env:
-          NPM_CONFIG_IGNORE_SCRIPTS: 'true'
+        run: npm ci --ignore-scripts
 
-      - name: Build (sanity)
+      - name: Build addon
         run: npm run build
 
-      - name: Generate prebuilds (N-API)
-        run: npm run prebuild
+      - name: Generate prebuild (N-API)
+        run: npx prebuild --napi --strip
 
-      - name: Assert prebuild tarballs exist
+      - name: Place .node in prebuilds layout
         shell: bash
         run: |
-          echo "Tree of prebuilds produced by this runner:"
-          ls -R prebuilds || true
-          test -n "$(find prebuilds -type f -name '*.tar.gz' -print -quit)" || { echo 'No .tar.gz files in prebuilds/'; exit 1; }
+          set -euo pipefail
+          mkdir -p prebuilds/linux-x64
+          # pegue o .node gerado pela prebuild (ajuste o path conforme seu output)
+          NODEFILE=$(find . -name "*.node" | head -n1)
+          cp -f "$NODEFILE" prebuilds/linux-x64/node.napi.node
 
-      - name: Upload prebuild artifacts
+      - name: Bundle shared libs into prebuilds (Linux)
+        run: bash tools/bundle-linux.sh
+
+      - name: Assert prebuilds present
+        run: |
+          ls -al prebuilds/linux-x64
+          test -f prebuilds/linux-x64/node.napi.node
+
+      - name: Upload prebuild artifact
         uses: actions/upload-artifact@v4
         with:
-          name: prebuilds-${{ runner.os }}-node${{ matrix.node }}
+          name: prebuilds-linux-x64
           path: prebuilds/
-          if-no-files-found: error
 
   release:
     needs: prebuild
@@ -73,189 +67,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download prebuild artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          pattern: prebuilds-*
-          merge-multiple: true
-          path: prebuilds-agg
+          name: prebuilds-linux-x64
+          path: .
 
-      - name: Show downloaded tree
-        run: |
-          echo "::group::Artifacts"
-          ls -R prebuilds-agg || true
-          echo "::endgroup::"
-      
-      - name: Extract prebuilds and vendor runtime libs into prebuilds/
-        shell: bash
-        env:
-          REPO_SLUG: ${{ github.repository }}
-          VENDOR_RELEASE_TAG: vendor-v1
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          shopt -s globstar nullglob
-          mkdir -p prebuilds
+      - name: Show tree
+        run: ls -R
 
-          echo "::group::Artifacts tree"
-          ls -R prebuilds-agg || true
-          echo "::endgroup::"
-
-          for tgz in prebuilds-agg/**/*.tar.gz prebuilds-agg/*.tar.gz; do
-            [ -f "$tgz" ] || continue
-            fname="$(basename "$tgz")"
-
-            # ex.: read-pdf2llm-v1.0.10-node-v115-linux-x64.tar.gz
-            plat="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\1/')"
-            arch="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\2/')"
-            out="prebuilds/${plat}-${arch}"
-            tmpdir="$(mktemp -d)"
-            echo ">> Extracting $fname -> $tmpdir"
-            tar -xzf "$tgz" -C "$tmpdir"
-
-            # 1) copie o .node para o layout que node-gyp-build espera
-            nodefile="$(find "$tmpdir" -type f -name '*.node' | head -n1 || true)"
-            mkdir -p "$out"
-            if [ -n "${nodefile:-}" ]; then
-              cp -f "$nodefile" "$out/node.napi.node"
-            fi
-
-            # 2) baixe o vendor correspondente e extraia apenas as libs de runtime
-            vend="vendor-${plat}-${arch}.tar.gz"
-            api="https://api.github.com/repos/${REPO_SLUG}/releases/tags/${VENDOR_RELEASE_TAG}"
-            echo ">> Fetching vendor asset $vend from $api"
-            url=$(curl -sH "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$api" \
-              | jq -r ".assets[] | select(.name==\"$vend\") | .browser_download_url")
-            if [ -z "$url" ] || [ "$url" = "null" ]; then
-              echo "WARN: vendor bundle $vend not found; skipping runtime libs for $plat-$arch"
-            else
-              vtmp="$(mktemp -d)"
-              curl -sfL -H "Authorization: Bearer ${GH_TOKEN}" -o "$vtmp/$vend" "$url"
-              tar -xzf "$vtmp/$vend" -C "$vtmp"
-              # runtime libs costumam estar em bin/ dentro do vendor
-              # Linux: .so / .so.*
-              find "$vtmp" -type f \( -name '*.so' -o -name '*.so.*' \) -exec cp -f {} "$out"/ \; || true
-              # macOS: .dylib
-              find "$vtmp" -type f -name '*.dylib' -exec cp -f {} "$out"/ \; || true
-              # Windows: .dll
-              find "$vtmp" -type f -name '*.dll' -exec cp -f {} "$out"/ \; || true
-              rm -rf "$vtmp"
-            fi
-
-            rm -rf "$tmpdir"
-          done
-
-          echo "::group::Merged prebuilds (expect .node + .so/.dylib/.dll)"
-          ls -al prebuilds/* || true
-          echo "::endgroup::"
-
-          # tem que existir pelo menos um .node
-          test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files after extraction'; exit 1; }
-
-      - name: Ensure RPATH=$ORIGIN on Linux .node
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update && sudo apt-get install -y patchelf binutils
-          for f in prebuilds/linux-*/node.napi*.node; do
-            [ -f "$f" ] || continue
-            echo "patching $f"
-            patchelf --set-rpath '$ORIGIN' --force-rpath "$f"
-            echo "after:"
-            readelf -d "$f" | egrep -i 'rpath|runpath' || true
-          done
-
-      - name: Normalize Linux SONAMEs (tesseract/leptonica) + quick introspection
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          for out in prebuilds/linux-*; do
-            [ -d "$out" ] || continue
-            echo ">> Inspecting $out"
-            ls -al "$out" || true
-
-            # Se o .node pedir libtesseract.so.5 mas só existir libtesseract.so, cria symlink
-            need_tess="$(readelf -d "$out"/node.napi*.node 2>/dev/null | awk '/NEEDED/ && /libtesseract/ {print $5}' | tr -d '[]' || true)"
-            if echo "$need_tess" | grep -q 'libtesseract\.so\.5'; then
-              if [ ! -f "$out/libtesseract.so.5" ] && [ -f "$out/libtesseract.so" ]; then
-                echo "Creating symlink libtesseract.so.5 -> libtesseract.so"
-                (cd "$out" && ln -sf libtesseract.so libtesseract.so.5)
-              fi
-            fi
-
-            # (Opcional) faça o mesmo para liblept se precisar alinhar versões
-            need_lept="$(readelf -d "$out"/node.napi*.node 2>/dev/null | awk '/NEEDED/ && /liblept/ {print $5}' | tr -d '[]' || true)"
-            if echo "$need_lept" | grep -q 'liblept\.so\.'; then
-              base="liblept.so"
-              ver="$(echo "$need_lept" | sed -n 's/.*\(liblept\.so\.[0-9][0-9]*\).*/\1/p' | head -n1)"
-              if [ -n "$ver" ] && [ ! -f "$out/$ver" ] && [ -f "$out/$base" ]; then
-                echo "Creating symlink $ver -> $base"
-                (cd "$out" && ln -sf "$base" "$ver")
-              fi
-            fi
-          done
-
-      - name: Install and bundle libgif.so.7 (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y libgif7
-          
-          LIBGIF="$(ldconfig -p | awk '/libgif\.so\.7/ {print $NF; exit}')"
-          if [ -z "${LIBGIF:-}" ] || [ ! -f "$LIBGIF" ]; then
-            echo "::error::libgif.so.7 not found even after install"
-            exit 1
-          fi
-          echo "Using $LIBGIF"
-
-          for out in prebuilds/linux-*; do
-            [ -d "$out" ] || continue
-            cp -f "$LIBGIF" "$out/"
-            # symlink opcional para resoluções que esperam "libgif.so"
-            (cd "$out" && [ -f libgif.so ] || ln -sf libgif.so.7 libgif.so)
-          done
-
-      - name: ldd check (Linux) – fail if any dependency is missing
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          failed=0
-          for f in prebuilds/linux-*/node.napi*.node; do
-            [ -f "$f" ] || continue
-            echo ">>> ldd $f"
-            ldd "$f" || true
-            if ldd "$f" | grep -i "not found"; then
-              echo "::error::Dependências ausentes em $f"
-              failed=1
-            fi
-          done
-          exit $failed
-
-      - name: npm pack --dry-run (should list prebuilds/**)
+      - name: npm pack --dry-run
         run: npm pack --dry-run
-        
+
       - name: Write npmrc
         run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # Publicar SEM scripts (não precisa instalar nada)
-      - name: Publish to npm (no scripts)
+      - name: Publish to npm
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_IGNORE_SCRIPTS: 'true'
-
-      - name: Create GitHub Release with assets
-        if: ${{ hashFiles('prebuilds/**') != '' }}
-        uses: softprops/action-gh-release@v2
-        with:
-          files: prebuilds/**
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
