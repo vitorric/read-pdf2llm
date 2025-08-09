@@ -84,8 +84,12 @@ jobs:
           ls -R prebuilds-agg || true
           echo "::endgroup::"
       
-      - name: Extract prebuild tarballs into prebuilds/ layout
+      - name: Extract prebuilds and vendor runtime libs into prebuilds/
         shell: bash
+        env:
+          REPO_SLUG: ${{ github.repository }}
+          VENDOR_RELEASE_TAG: vendor-v1
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
@@ -99,19 +103,17 @@ jobs:
             [ -f "$tgz" ] || continue
             fname="$(basename "$tgz")"
 
-            # read-pdf2llm-v1.0.8-node-v115-linux-x64.tar.gz
+            # ex.: read-pdf2llm-v1.0.10-node-v115-linux-x64.tar.gz
             plat="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\1/')"
             arch="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\2/')"
-
             out="prebuilds/${plat}-${arch}"
             tmpdir="$(mktemp -d)"
-            echo "Extracting $fname -> $tmpdir"
+            echo ">> Extracting $fname -> $tmpdir"
             tar -xzf "$tgz" -C "$tmpdir"
 
-            # ache o .node e as libs de runtime
+            # 1) copie o .node para o layout que node-gyp-build espera
             nodefile="$(find "$tmpdir" -type f -name '*.node' | head -n1 || true)"
             mkdir -p "$out"
-
             if [ -n "${nodefile:-}" ]; then
               cp -f "$nodefile" "$out/node.napi.node"
               if [ "$plat" = "linux" ]; then
@@ -120,22 +122,36 @@ jobs:
               fi
             fi
 
-            # ✅ COPIE AS LIBS DE RUNTIME PRO MESMO DIRETÓRIO DO .node
-            # Linux: .so/.so.*
-            find "$tmpdir" -type f \( -name '*.so' -o -name '*.so.*' \) -exec cp -f {} "$out"/ \; || true
-            # macOS: .dylib
-            find "$tmpdir" -type f -name '*.dylib' -exec cp -f {} "$out"/ \; || true
-            # Windows: .dll
-            find "$tmpdir" -type f -name '*.dll' -exec cp -f {} "$out"/ \; || true
+            # 2) baixe o vendor correspondente e extraia apenas as libs de runtime
+            vend="vendor-${plat}-${arch}.tar.gz"
+            api="https://api.github.com/repos/${REPO_SLUG}/releases/tags/${VENDOR_RELEASE_TAG}"
+            echo ">> Fetching vendor asset $vend from $api"
+            url=$(curl -sH "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$api" \
+              | jq -r ".assets[] | select(.name==\"$vend\") | .browser_download_url")
+            if [ -z "$url" ] || [ "$url" = "null" ]; then
+              echo "WARN: vendor bundle $vend not found; skipping runtime libs for $plat-$arch"
+            else
+              vtmp="$(mktemp -d)"
+              curl -sfL -H "Authorization: Bearer ${GH_TOKEN}" -o "$vtmp/$vend" "$url"
+              tar -xzf "$vtmp/$vend" -C "$vtmp"
+              # runtime libs costumam estar em bin/ dentro do vendor
+              # Linux: .so / .so.*
+              find "$vtmp" -type f \( -name '*.so' -o -name '*.so.*' \) -exec cp -f {} "$out"/ \; || true
+              # macOS: .dylib
+              find "$vtmp" -type f -name '*.dylib' -exec cp -f {} "$out"/ \; || true
+              # Windows: .dll
+              find "$vtmp" -type f -name '*.dll' -exec cp -f {} "$out"/ \; || true
+              rm -rf "$vtmp"
+            fi
 
             rm -rf "$tmpdir"
           done
 
-          echo "::group::Merged prebuilds"
+          echo "::group::Merged prebuilds (expect .node + .so/.dylib/.dll)"
           ls -al prebuilds/* || true
           echo "::endgroup::"
 
-          # Falha se não tiver nenhum .node
+          # tem que existir pelo menos um .node
           test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files after extraction'; exit 1; }
 
       - name: npm pack --dry-run (should list prebuilds/**)
