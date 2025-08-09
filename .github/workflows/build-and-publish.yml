@@ -1,5 +1,8 @@
 name: build-and-publish
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ "feat/build-addon" ]    # roda em TODO push
@@ -66,9 +69,11 @@ jobs:
           node-version: 20
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Download prebuilds from matrix
+      - name: Download prebuild artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: prebuilds-*
+          merge-multiple: true
           path: prebuilds-agg
 
       - name: Merge prebuilds into package tree
@@ -82,7 +87,11 @@ jobs:
             cp -f "$f" "$dest"
           done
           echo "Prebuilds merged:"
-          find prebuilds -type f -maxdepth 3 -print
+          find prebuilds -type f -maxdepth 3 -print || true
+
+      # (opcional, mas útil para debug)
+      - name: npm pack --dry-run (show files)
+        run: npm pack --dry-run
 
       - name: Install prod deps
         run: npm install --omit=dev --ignore-scripts
@@ -94,6 +103,7 @@ jobs:
           NPM_CONFIG_IGNORE_SCRIPTS: 'true'
 
       - name: Create GitHub Release with assets
+        if: ${{ hashFiles('prebuilds/**') != '' }}
         uses: softprops/action-gh-release@v2
         with:
           files: prebuilds/**
