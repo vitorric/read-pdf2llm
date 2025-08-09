@@ -42,7 +42,7 @@ jobs:
           echo "PDFIUM_DIR=$PDFIUM_DIR" >> "$GITHUB_ENV"
 
       - name: Instalar deps JS (sem scripts)
-        run: npm ci --ignore-scripts
+        run: npm install --ignore-scripts
 
       - name: Build do addon (usa PDFIUM_DIR)
         env:
