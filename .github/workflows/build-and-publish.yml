@@ -85,12 +85,13 @@ jobs:
           find prebuilds -type f -maxdepth 3 -print
 
       - name: Install prod deps
-        run: npm install --omit=dev
+        run: npm install --omit=dev --ignore-scripts
 
       - name: Publish to npm
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_IGNORE_SCRIPTS: 'true'
 
       - name: Create GitHub Release with assets
         uses: softprops/action-gh-release@v2
