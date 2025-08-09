@@ -1,12 +1,11 @@
 name: build-and-publish
-
 permissions:
   contents: write
 
 on:
   push:
-    branches: [ "feat/build-addon" ]     # roda em todo push nessa branch
-    tags:     [ "v*.*.*" ]               # e também quando criar tag vX.Y.Z
+    branches: [ "feat/build-addon" ]
+    tags: [ "v*.*.*" ]
   workflow_dispatch: {}
 
 jobs:
@@ -17,18 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: SO deps (iguais ao seu Dockerfile)
+      - name: System deps (Ubuntu 24.04)
         shell: bash
         run: |
           set -euxo pipefail
-          apt-get update && apt-get install -y \
+          apt-get update
+          apt-get install -y \
             curl gnupg ca-certificates wget git python3 make g++ build-essential \
             tesseract-ocr libtesseract-dev libleptonica-dev software-properties-common \
-            tesseract-ocr-por
+            tesseract-ocr-por pkg-config patchelf
           curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-          apt-get install -y nodejs patchelf
+          apt-get install -y nodejs
 
-      - name: Baixar PDFium (headers+libs)
+      - name: Download PDFium (linux-x64)
         shell: bash
         env:
           PDFIUM_DIR: ${{ github.workspace }}/pdfium
@@ -39,57 +39,48 @@ jobs:
           tar -xzf pdfium.tgz -C "$PDFIUM_DIR"
           test -f "$PDFIUM_DIR/include/fpdfview.h"
           rm -f pdfium.tgz
-          echo "PDFIUM_DIR=$PDFIUM_DIR" >> "$GITHUB_ENV"
+          echo "PDFIUM_DIR=$PDFIUM_DIR" >> $GITHUB_ENV
 
-      - name: Instalar deps JS (sem scripts)
+      - name: Install deps (no scripts)
+        shell: bash
         run: npm install --ignore-scripts
 
-      - name: Build do addon (usa PDFIUM_DIR)
-        env:
-          PDFIUM_DIR: ${{ env.PDFIUM_DIR }}
-        run: |
-          npx node-gyp configure
-          npx node-gyp build
-
-      - name: Gerar prebuild N-API
-        run: npx prebuild --napi --strip
-
-      - name: Montar layout prebuilds/ + RPATH + libs
+      - name: Build addon (uses PDFIUM_DIR)
         shell: bash
         env:
           PDFIUM_DIR: ${{ env.PDFIUM_DIR }}
         run: |
-          set -euo pipefail
+          set -euxo pipefail
+          npx node-gyp configure
+          npx node-gyp build
+
+      - name: Generate prebuild (N-API)
+        shell: bash
+        run: npx prebuild --napi --strip
+
+      - name: Place .node in prebuilds/ layout
+        shell: bash
+        run: |
+          set -euxo pipefail
           mkdir -p prebuilds/linux-x64
-          NODEFILE=$(find ./ -name "*.node" | head -n1)
+          NODEFILE=$(find . -name "*.node" | head -n1)
           cp -f "$NODEFILE" prebuilds/linux-x64/node.napi.node
 
-          # RPATH=$ORIGIN no .node
-          patchelf --set-rpath '$ORIGIN' --force-rpath prebuilds/linux-x64/node.napi.node
-
-          # Copiar libs runtime necessárias (PDFium, Tess, Lept, GIF)
-          cp -f "$PDFIUM_DIR/lib/libpdfium.so" prebuilds/linux-x64/
-          for lib in libtesseract.so.5 libtesseract.so liblept.so.5 liblept.so libgif.so.7; do
-            path=$(ldconfig -p | awk -v n="$lib" '$1==n {print $NF; exit}')
-            [ -n "$path" ] && cp -f "$path" prebuilds/linux-x64/ || true
-          done
-          # normalizar SONAMEs exigidos
-          [ -f prebuilds/linux-x64/libtesseract.so.5 ] || { [ -f prebuilds/linux-x64/libtesseract.so ] && cp -f prebuilds/linux-x64/libtesseract.so prebuilds/linux-x64/libtesseract.so.5; }
-          [ -f prebuilds/linux-x64/liblept.so.5 ]      || { [ -f prebuilds/linux-x64/liblept.so ]      && cp -f prebuilds/linux-x64/liblept.so      prebuilds/linux-x64/liblept.so.5; }
-          [ -f prebuilds/linux-x64/libgif.so ]         || { [ -f prebuilds/linux-x64/libgif.so.7 ]     && cp -f prebuilds/linux-x64/libgif.so.7     prebuilds/linux-x64/libgif.so; }
-
-          echo ">>> ldd final"
-          ldd prebuilds/linux-x64/node.napi.node
-          if ldd prebuilds/linux-x64/node.napi.node | grep -qi "not found"; then
-            echo "::error::faltando dependências"
-            exit 1
-          fi
+      - name: Bundle shared libs into prebuilds (Linux)
+        shell: bash
+        env:
+          PDFIUM_DIR: ${{ env.PDFIUM_DIR }}
+        run: |
+          set -euxo pipefail
+          bash tools/bundle-linux.sh
           ls -al prebuilds/linux-x64
+          ldd prebuilds/linux-x64/node.napi.node
 
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-x64
           path: prebuilds/
+          if-no-files-found: error
 
   release:
     needs: prebuild-linux
@@ -97,22 +88,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # Node no runner (fora do container) + .npmrc com registry
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
       - uses: actions/download-artifact@v4
         with:
           name: prebuilds-linux-x64
           path: .
-
-      - name: Verificar pacote
+      - name: Show tree
+        run: ls -R
+      - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
-
-      - name: Publicar no npm
+      - name: Write npmrc
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
