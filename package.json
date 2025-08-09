@@ -17,7 +17,6 @@
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "install": "node-gyp-build",
     "build": "node-gyp configure build",
     "prebuild": "prebuild --napi --strip"
   },
