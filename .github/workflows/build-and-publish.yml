@@ -118,10 +118,6 @@ jobs:
             mkdir -p "$out"
             if [ -n "${nodefile:-}" ]; then
               cp -f "$nodefile" "$out/node.napi.node"
-              if [ "$plat" = "linux" ]; then
-                cp -f "$nodefile" "$out/node.napi.glibc.node" || true
-                cp -f "$nodefile" "$out/node.napi.musl.node"  || true
-              fi
             fi
 
             # 2) baixe o vendor correspondente e extraia apenas as libs de runtime
@@ -161,16 +157,64 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update && sudo apt-get install -y patchelf
+          sudo apt-get update && sudo apt-get install -y patchelf binutils
           for f in prebuilds/linux-*/node.napi*.node; do
             [ -f "$f" ] || continue
             echo "patching $f"
-            # seta RUNPATH para $ORIGIN (a pasta onde ficam as .so)
             patchelf --set-rpath '$ORIGIN' --force-rpath "$f"
             echo "after:"
             readelf -d "$f" | egrep -i 'rpath|runpath' || true
           done
-          
+
+      - name: Normalize Linux SONAMEs (tesseract/leptonica) + quick introspection
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for out in prebuilds/linux-*; do
+            [ -d "$out" ] || continue
+            echo ">> Inspecting $out"
+            ls -al "$out" || true
+
+            # Se o .node pedir libtesseract.so.5 mas só existir libtesseract.so, cria symlink
+            need_tess="$(readelf -d "$out"/node.napi*.node 2>/dev/null | awk '/NEEDED/ && /libtesseract/ {print $5}' | tr -d '[]' || true)"
+            if echo "$need_tess" | grep -q 'libtesseract\.so\.5'; then
+              if [ ! -f "$out/libtesseract.so.5" ] && [ -f "$out/libtesseract.so" ]; then
+                echo "Creating symlink libtesseract.so.5 -> libtesseract.so"
+                (cd "$out" && ln -sf libtesseract.so libtesseract.so.5)
+              fi
+            fi
+
+            # (Opcional) faça o mesmo para liblept se precisar alinhar versões
+            need_lept="$(readelf -d "$out"/node.napi*.node 2>/dev/null | awk '/NEEDED/ && /liblept/ {print $5}' | tr -d '[]' || true)"
+            if echo "$need_lept" | grep -q 'liblept\.so\.'; then
+              base="liblept.so"
+              ver="$(echo "$need_lept" | sed -n 's/.*\(liblept\.so\.[0-9][0-9]*\).*/\1/p' | head -n1)"
+              if [ -n "$ver" ] && [ ! -f "$out/$ver" ] && [ -f "$out/$base" ]; then
+                echo "Creating symlink $ver -> $base"
+                (cd "$out" && ln -sf "$base" "$ver")
+              fi
+            fi
+          done
+
+      - name: ldd check (Linux) – fail if any dependency is missing
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for f in prebuilds/linux-*/node.napi*.node; do
+            [ -f "$f" ] || continue
+            echo ">>> ldd $f"
+            ldd "$f" || true
+            if ldd "$f" | grep -i "not found"; then
+              echo "::error::Dependências ausentes em $f"
+              failed=1
+            fi
+          done
+          exit $failed
+
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
         

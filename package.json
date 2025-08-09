@@ -18,7 +18,7 @@
   "type": "commonjs",
   "gypfile": true,
   "scripts": {
-    "install": "node-gyp-build test",
+    "install": "node-gyp-build",
     "build": "node-gyp configure build",
     "prebuild": "prebuild --napi --strip",
     "fetch:vendor": "node tools/fetch-vendor.js",
@@ -26,7 +26,6 @@
   },
   "dependencies": {
     "node-gyp-build": "^4.8.0",
-    "bindings": "^1.5.0",
     "node-addon-api": "^7.0.0"
   },
   "devDependencies": {

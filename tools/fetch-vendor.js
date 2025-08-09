@@ -45,7 +45,7 @@ function ghGet(url) {
       method: 'GET',
       headers: {
         'User-Agent': 'fetch-vendor-script',
-        'Authorization': `token ${TOKEN}`,
+        'Authorization': `Bearer ${TOKEN}`,
         'Accept': 'application/vnd.github+json'
       }
     }, res => {
