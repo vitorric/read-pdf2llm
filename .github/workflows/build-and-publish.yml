@@ -83,7 +83,61 @@ jobs:
           echo "::group::Artifacts"
           ls -R prebuilds-agg || true
           echo "::endgroup::"
+
       - name: Extract prebuild tarballs into prebuilds/ layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          mkdir -p prebuilds
+
+          echo "::group::Artifacts tree"
+          ls -R prebuilds-agg || true
+          echo "::endgroup::"
+
+          for tgz in prebuilds-agg/**/*.tar.gz prebuilds-agg/*.tar.gz; do
+            [ -f "$tgz" ] || continue
+            fname="$(basename "$tgz")"
+
+            # read-pdf2llm-v1.0.8-node-v115-linux-x64.tar.gz
+            plat="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\1/')"
+            arch="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\2/')"
+
+            out="prebuilds/${plat}-${arch}"
+            tmpdir="$(mktemp -d)"
+            echo "Extracting $fname -> $tmpdir"
+            tar -xzf "$tgz" -C "$tmpdir"
+
+            # ache o .node e as libs de runtime
+            nodefile="$(find "$tmpdir" -type f -name '*.node' | head -n1 || true)"
+            mkdir -p "$out"
+
+            if [ -n "${nodefile:-}" ]; then
+              cp -f "$nodefile" "$out/node.napi.node"
+              if [ "$plat" = "linux" ]; then
+                cp -f "$nodefile" "$out/node.napi.glibc.node" || true
+                cp -f "$nodefile" "$out/node.napi.musl.node"  || true
+              fi
+            fi
+
+            # ✅ COPIE AS LIBS DE RUNTIME PRO MESMO DIRETÓRIO DO .node
+            # Linux: .so/.so.*
+            find "$tmpdir" -type f \( -name '*.so' -o -name '*.so.*' \) -exec cp -f {} "$out"/ \; || true
+            # macOS: .dylib
+            find "$tmpdir" -type f -name '*.dylib' -exec cp -f {} "$out"/ \; || true
+            # Windows: .dll
+            find "$tmpdir" -type f -name '*.dll' -exec cp -f {} "$out"/ \; || true
+
+            rm -rf "$tmpdir"
+          done
+
+          echo "::group::Merged prebuilds"
+          ls -al prebuilds/* || true
+          echo "::endgroup::"
+
+          # Falha se não tiver nenhum .node
+          test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files after extraction'; exit 1; }
+
         shell: bash
         run: |
           set -euo pipefail
