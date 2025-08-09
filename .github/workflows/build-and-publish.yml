@@ -54,7 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: prebuilds-${{ runner.os }}-node${{ matrix.node }}
-          path: prebuilds/**
+          path: prebuilds/
           if-no-files-found: error
 
   release:
@@ -94,6 +94,11 @@ jobs:
 
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
+        
+      - name: Write npmrc
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Publicar SEM scripts (não precisa instalar nada)
       - name: Publish to npm (no scripts)
