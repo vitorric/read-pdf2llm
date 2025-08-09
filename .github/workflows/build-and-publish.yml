@@ -97,7 +97,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-x64
-          path: prebuilds/
+          path: prebuilds-agg
           if-no-files-found: error
 
   release:
@@ -115,23 +115,19 @@ jobs:
         run: |
           set -euxo pipefail
           shopt -s nullglob dotglob globstar
+          rm -rf prebuilds
           mkdir -p prebuilds
           found=0
-          # Copia de quaisquer pastas baixadas que contenham um subdir "prebuilds/"
-          for src in prebuilds-*/prebuilds **/prebuilds; do
+          for src in prebuilds-agg/**/prebuilds; do
             [ -d "$src" ] || continue
             echo "Mesclando de: $src"
             cp -a "$src"/. prebuilds/
             found=1
           done
-          if [ $found -eq 0 ]; then
-            echo "WARN: nenhum diretório 'prebuilds/' encontrado nos artifacts"
-            find . -maxdepth 4 -type d -name prebuilds -print || true
-          fi
+          [ $found -eq 1 ] || { echo "Nenhum 'prebuilds/' encontrado nos artifacts"; find prebuilds-agg -maxdepth 3 -type d -name prebuilds -print; exit 1; }
           echo "::group::Final tree ./prebuilds"
-          find prebuilds -maxdepth 3 -type f -print || true
+          find prebuilds -maxdepth 3 -type f -print
           echo "::endgroup::"
-
       - name: Force-include prebuilds (npmignore)
         shell: bash
         run: |
