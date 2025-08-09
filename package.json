@@ -18,11 +18,11 @@
   "type": "commonjs",
   "gypfile": true,
   "scripts": {
+    "install": "node-gyp-build test",
     "build": "node-gyp configure build",
     "prebuild": "prebuild --napi --strip",
     "fetch:vendor": "node tools/fetch-vendor.js",
-    "prepublishOnly": "npm run prebuild",
-    "install": "node-gyp-build"
+    "prepublishOnly": "npm run prebuild"
   },
   "dependencies": {
     "node-gyp-build": "^4.8.0",
