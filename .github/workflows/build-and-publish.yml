@@ -55,6 +55,7 @@ jobs:
         with:
           name: prebuilds-${{ runner.os }}-node${{ matrix.node }}
           path: prebuilds/**
+          if-no-files-found: error
 
   release:
     needs: prebuild
@@ -63,12 +64,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node for publish
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: 'https://registry.npmjs.org'
-
       - name: Download prebuild artifacts
         uses: actions/download-artifact@v4
         with:
@@ -76,27 +71,32 @@ jobs:
           merge-multiple: true
           path: prebuilds-agg
 
+      - name: Show downloaded tree
+        run: |
+          echo "::group::Artifacts"
+          ls -R prebuilds-agg || true
+          echo "::endgroup::"
+
       - name: Merge prebuilds into package tree
         shell: bash
         run: |
           shopt -s globstar nullglob
           mkdir -p prebuilds
+          # copia tudo que estiver em */prebuilds/** para ./prebuilds/**
           for f in prebuilds-agg/**/prebuilds/**; do
             dest="prebuilds/${f#*/prebuilds/}"
             mkdir -p "$(dirname "$dest")"
             cp -f "$f" "$dest"
           done
-          echo "Prebuilds merged:"
-          find prebuilds -type f -maxdepth 3 -print || true
+          echo "::group::Merged prebuilds"
+          ls -R prebuilds || true
+          echo "::endgroup::"
 
-      # (opcional, mas útil para debug)
-      - name: npm pack --dry-run (show files)
+      - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
 
-      - name: Install prod deps
-        run: npm install --omit=dev --ignore-scripts
-
-      - name: Publish to npm
+      # Publicar SEM scripts (não precisa instalar nada)
+      - name: Publish to npm (no scripts)
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
