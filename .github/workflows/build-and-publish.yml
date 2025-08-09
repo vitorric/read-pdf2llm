@@ -110,7 +110,28 @@ jobs:
         with:
           name: prebuilds-linux-x64
           path: .
-        
+      - name: Normalize prebuilds path
+        shell: bash
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob dotglob globstar
+          mkdir -p prebuilds
+          found=0
+          # Copia de quaisquer pastas baixadas que contenham um subdir "prebuilds/"
+          for src in prebuilds-*/prebuilds **/prebuilds; do
+            [ -d "$src" ] || continue
+            echo "Mesclando de: $src"
+            cp -a "$src"/. prebuilds/
+            found=1
+          done
+          if [ $found -eq 0 ]; then
+            echo "WARN: nenhum diretório 'prebuilds/' encontrado nos artifacts"
+            find . -maxdepth 4 -type d -name prebuilds -print || true
+          fi
+          echo "::group::Final tree ./prebuilds"
+          find prebuilds -maxdepth 3 -type f -print || true
+          echo "::endgroup::"
+
       - name: Force-include prebuilds (npmignore)
         shell: bash
         run: |
@@ -124,60 +145,19 @@ jobs:
             echo
             echo "!prebuilds/**"
           } > .npmignore
-          npx npm-packlist | sed 's/^/ - /'
-
-
-      - name: Normalize prebuilds path
-        shell: bash
-        run: |
-          set -euxo pipefail
-          shopt -s nullglob dotglob globstar
-
-          # Se já existe ./prebuilds com arquivos, beleza
-          if [ -d prebuilds ] && find prebuilds -type f -print -quit | grep -q .; then
-            echo "prebuilds/ já presente"
-          else
-            mkdir -p prebuilds
-            # Copia de quaisquer pastas que tenham um subdir "prebuilds/"
-            found=0
-            for src in prebuilds-*/prebuilds **/prebuilds; do
-              [ -d "$src" ] || continue
-              echo "Mesclando de: $src"
-              rsync -a "$src"/ prebuilds/
-              found=1
-            done
-            if [ $found -eq 0 ]; then
-              echo "WARN: nenhum diretório 'prebuilds/' encontrado nos artifacts"
-              ls -R || true
-            fi
-          fi
-
-          echo "::group::Final tree ./prebuilds"
-          ls -R prebuilds || true
-          echo "::endgroup::"
-
-      - name: Show tree
-        run: ls -R
+          echo "--- .npmignore ---"
+          cat .npmignore
 
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
 
-      - name: list prebuilds candidates
+      - name: Assert prebuilds in tarball (using npm --json)
         shell: bash
         run: |
           set -euxo pipefail
-          echo "Candidates under workspace:"
-          find . -type d -name prebuilds -maxdepth 5 -print
-          echo "Packlist:"
-          npx npm-packlist | sed 's/^/ - /'
+          npm pack --dry-run --json > pack.json
+          node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync("pack.json","utf8"))[0]; const files=j.files.map(f=>f.path); console.log(files.join("\n")); if(!files.some(p=>p.startsWith("prebuilds/"))) { console.error("no prebuilds in tarball"); process.exit(1); }'
 
-      - name: Assert prebuilds in tarball
-        shell: bash
-        run: |
-          set -euxo pipefail
-          TARBALL=$(npm pack --silent)
-          tar -tzf "$TARBALL" | sed -n 's/^package\///p' | egrep '^prebuilds/' >/dev/null || { echo "no prebuilds in tarball"; exit 1; }
-          rm -f "$TARBALL"
       - name: Write npmrc
         run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
         env:
