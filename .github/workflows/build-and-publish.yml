@@ -156,6 +156,21 @@ jobs:
           # tem que existir pelo menos um .node
           test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files after extraction'; exit 1; }
 
+      - name: Ensure RPATH=$ORIGIN on Linux .node
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y patchelf
+          for f in prebuilds/linux-*/node.napi*.node; do
+            [ -f "$f" ] || continue
+            echo "patching $f"
+            # seta RUNPATH para $ORIGIN (a pasta onde ficam as .so)
+            patchelf --set-rpath '$ORIGIN' --force-rpath "$f"
+            echo "after:"
+            readelf -d "$f" | egrep -i 'rpath|runpath' || true
+          done
+          
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
         
