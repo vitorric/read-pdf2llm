@@ -19,7 +19,7 @@
   "gypfile": true,
   "scripts": {
     "build": "node-gyp configure build",
-    "prebuild": "prebuild --all --strip",
+    "prebuild": "prebuild --napi --strip",
     "install": "prebuild-install || node-gyp rebuild",
     "fetch:vendor": "node tools/fetch-vendor.js",
     "prepublishOnly": "npm run prebuild"
