@@ -110,6 +110,20 @@ jobs:
         with:
           name: prebuilds-linux-x64
           path: .
+
+      - name: Normalize prebuilds path
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p prebuilds
+          shopt -s nullglob
+          # Copia todo prebuilds/** vindo dos artifacts (qualquer nome) para ./prebuilds/
+          for d in prebuilds-*/prebuilds prebuilds/prebuilds; do
+            [ -d "$d" ] && rsync -a "$d"/ ./prebuilds/
+          done
+          echo "Final tree:"
+          ls -R prebuilds || true
+
       - name: Show tree
         run: ls -R
       - name: npm pack --dry-run (should list prebuilds/**)
