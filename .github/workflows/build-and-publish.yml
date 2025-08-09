@@ -97,7 +97,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-x64
-          path: prebuilds-agg
           if-no-files-found: error
 
   release:
@@ -109,7 +108,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: prebuilds-linux-x64
-          path: .
+          path: prebuilds/   # <— baixa aqui
+
       - name: Normalize prebuilds path
         shell: bash
         run: |
@@ -128,6 +128,7 @@ jobs:
           echo "::group::Final tree ./prebuilds"
           find prebuilds -maxdepth 3 -type f -print
           echo "::endgroup::"
+
       - name: Force-include prebuilds (npmignore)
         shell: bash
         run: |
