@@ -39,8 +39,8 @@
     "index.js",
     "binding.gyp",
     "src/**",
-    "prebuilds/**",
     "tools/**",
+    "prebuilds/**",
     "README.md",
     "LICENSE"
   ]

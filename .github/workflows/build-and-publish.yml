@@ -115,7 +115,6 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          # Cria .npmignore que ignora lixo… mas **permite** prebuilds/**
           {
             echo "node_modules"
             echo ".git"
@@ -125,27 +124,52 @@ jobs:
             echo
             echo "!prebuilds/**"
           } > .npmignore
-          echo "--- .npmignore ---"
-          cat .npmignore
+          npx npm-packlist | sed 's/^/ - /'
+
 
       - name: Normalize prebuilds path
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p prebuilds
-          shopt -s nullglob
-          # Copia todo prebuilds/** vindo dos artifacts (qualquer nome) para ./prebuilds/
-          for d in prebuilds-*/prebuilds prebuilds/prebuilds; do
-            [ -d "$d" ] && rsync -a "$d"/ ./prebuilds/
-          done
-          echo "Final tree:"
+          shopt -s nullglob dotglob globstar
+
+          # Se já existe ./prebuilds com arquivos, beleza
+          if [ -d prebuilds ] && find prebuilds -type f -print -quit | grep -q .; then
+            echo "prebuilds/ já presente"
+          else
+            mkdir -p prebuilds
+            # Copia de quaisquer pastas que tenham um subdir "prebuilds/"
+            found=0
+            for src in prebuilds-*/prebuilds **/prebuilds; do
+              [ -d "$src" ] || continue
+              echo "Mesclando de: $src"
+              rsync -a "$src"/ prebuilds/
+              found=1
+            done
+            if [ $found -eq 0 ]; then
+              echo "WARN: nenhum diretório 'prebuilds/' encontrado nos artifacts"
+              ls -R || true
+            fi
+          fi
+
+          echo "::group::Final tree ./prebuilds"
           ls -R prebuilds || true
+          echo "::endgroup::"
 
       - name: Show tree
         run: ls -R
 
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
+
+      - name: list prebuilds candidates
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Candidates under workspace:"
+          find . -type d -name prebuilds -maxdepth 5 -print
+          echo "Packlist:"
+          npx npm-packlist | sed 's/^/ - /'
 
       - name: Assert prebuilds in tarball
         shell: bash
