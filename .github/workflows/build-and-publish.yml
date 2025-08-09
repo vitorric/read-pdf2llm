@@ -41,8 +41,10 @@ jobs:
           VENDOR_RELEASE_TAG: vendor-v1   # troque se usou outro nome
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install deps
-        run: npm install
+      - name: Install deps (no scripts)
+        run: npm install --ignore-scripts
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: 'true'
 
       - name: Build (sanity)
         run: npm run build
