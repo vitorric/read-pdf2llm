@@ -198,23 +198,6 @@ jobs:
             fi
           done
 
-      - name: ldd check (Linux) – fail if any dependency is missing
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          failed=0
-          for f in prebuilds/linux-*/node.napi*.node; do
-            [ -f "$f" ] || continue
-            echo ">>> ldd $f"
-            ldd "$f" || true
-            if ldd "$f" | grep -i "not found"; then
-              echo "::error::Dependências ausentes em $f"
-              failed=1
-            fi
-          done
-          exit $failed
-
       - name: Auto-bundle missing shared libs from runner (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -271,6 +254,23 @@ jobs:
           for out in prebuilds/linux-*; do
             fix_one_dir "$out"
           done
+
+      - name: ldd check (Linux) – fail if any dependency is missing
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for f in prebuilds/linux-*/node.napi*.node; do
+            [ -f "$f" ] || continue
+            echo ">>> ldd $f"
+            ldd "$f" || true
+            if ldd "$f" | grep -i "not found"; then
+              echo "::error::Dependências ausentes em $f"
+              failed=1
+            fi
+          done
+          exit $failed
 
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
