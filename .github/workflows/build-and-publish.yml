@@ -97,6 +97,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-x64
+          path: prebuilds/
           if-no-files-found: error
 
   release:
@@ -108,8 +109,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: prebuilds-linux-x64
-          path: prebuilds/   # <— baixa aqui
-
+          path: prebuilds/
       - name: Normalize prebuilds path
         shell: bash
         run: |
