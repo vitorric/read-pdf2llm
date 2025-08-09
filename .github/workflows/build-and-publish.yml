@@ -41,6 +41,12 @@ jobs:
           rm -f pdfium.tgz
           echo "PDFIUM_DIR=$PDFIUM_DIR" >> $GITHUB_ENV
 
+      - name: Debug node-addon-api include path
+        shell: bash
+        run: |
+          node -p "require('node-addon-api').include_dir || require('node-addon-api').include"
+          test -f "$(node -p "require('node-addon-api').include_dir || require('node-addon-api').include")/napi.h" && echo "napi.h OK"
+
       - name: Install deps (no scripts)
         shell: bash
         run: npm install --ignore-scripts
