@@ -215,6 +215,63 @@ jobs:
           done
           exit $failed
 
+      - name: Auto-bundle missing shared libs from runner (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          fix_one_dir() {
+            local out="$1"
+            [ -d "$out" ] || return 0
+            echo ">> Checking $out"
+            local nodefile
+            nodefile="$(ls "$out"/node.napi*.node 2>/dev/null | head -n1 || true)"
+            [ -n "$nodefile" ] || return 0
+
+            # 1) Descobrir libs faltantes
+            local missing
+            missing="$(ldd "$nodefile" | awk '/not found/ {print $1}')"
+            if [ -z "$missing" ]; then
+              echo "No missing libs for $nodefile"
+              return 0
+            fi
+
+            echo "Missing libs: $missing"
+
+            # 2) Para cada lib faltante, tentar localizar via ldconfig e copiar
+            while read -r lib; do
+              [ -n "$lib" ] || continue
+              # tenta localizar caminho absoluto pelo cache do SO
+              cand="$(ldconfig -p | awk -v n="$lib" '$1==n {print $NF; exit}')"
+              if [ -n "$cand" ] && [ -f "$cand" ]; then
+                echo "Copying $lib from $cand"
+                cp -f "$cand" "$out/"
+              else
+                echo "WARN: Could not locate $lib via ldconfig -p"
+              fi
+            done <<< "$missing"
+
+            # 3) Normaliza alguns SONAMEs comuns (gif/lept) se necessário
+            if [ -f "$out/libgif.so.7" ] && [ ! -f "$out/libgif.so" ]; then
+              (cd "$out" && ln -sf libgif.so.7 libgif.so)
+            fi
+            if [ -f "$out/liblept.so.5" ] && [ ! -f "$out/liblept.so" ]; then
+              (cd "$out" && ln -sf liblept.so.5 liblept.so)
+            fi
+
+            # 4) Revalida
+            echo "Re-checking $nodefile"
+            ldd "$nodefile" || true
+            if ldd "$nodefile" | grep -i "not found"; then
+              echo "::error::Still missing dependencies in $nodefile"
+              return 1
+            fi
+          }
+
+          for out in prebuilds/linux-*; do
+            fix_one_dir "$out"
+          done
+
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
         
