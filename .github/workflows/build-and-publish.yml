@@ -50,12 +50,12 @@ jobs:
       - name: Generate prebuilds (N-API)
         run: npm run prebuild
 
-      - name: Assert prebuilds exist
+      - name: Assert prebuild tarballs exist
         shell: bash
         run: |
           echo "Tree of prebuilds produced by this runner:"
           ls -R prebuilds || true
-          test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files in prebuilds/'; exit 1; }
+          test -n "$(find prebuilds -type f -name '*.tar.gz' -print -quit)" || { echo 'No .tar.gz files in prebuilds/'; exit 1; }
 
       - name: Upload prebuild artifacts
         uses: actions/upload-artifact@v4
@@ -83,40 +83,46 @@ jobs:
           echo "::group::Artifacts"
           ls -R prebuilds-agg || true
           echo "::endgroup::"
-
-      - name: Merge prebuilds into package tree
+      - name: Extract prebuild tarballs into prebuilds/ layout
         shell: bash
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
           mkdir -p prebuilds
-          echo "Downloaded artifacts layout:"
-          ls -R prebuilds-agg || true
 
-          # Caso 1: artifacts empacotados com raiz 'prebuilds/'
-          found=0
-          for f in prebuilds-agg/**/prebuilds/**; do
-            dest="prebuilds/${f#*/prebuilds/}"
-            mkdir -p "$(dirname "$dest")"
-            cp -f "$f" "$dest"
-            found=1
+          echo "::group::Artifacts tree"
+          ls -R prebuilds-agg || true
+          echo "::endgroup::"
+
+          # Para cada .tar.gz gerado pelo prebuild
+          for tgz in prebuilds-agg/**/*.tar.gz prebuilds-agg/*.tar.gz; do
+            [ -f "$tgz" ] || continue
+            fname="$(basename "$tgz")"
+
+            # Extrai plataforma/arquitetura do nome do arquivo
+            # Ex.: read-pdf2llm-v1.0.7-node-v115-linux-x64.tar.gz
+            plat="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\1/')"
+            arch="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\2/')"
+
+            out="prebuilds/${plat}-${arch}"
+            mkdir -p "$out"
+
+            echo "Extracting $fname -> $out"
+            tar -xzf "$tgz" -C "$out"
+
+            # Ache o .node dentro do tar e garanta nome amigável para N-API
+            nodefile="$(find "$out" -type f -name '*.node' | head -n1 || true)"
+            if [ -n "${nodefile:-}" ]; then
+              cp -f "$nodefile" "$out/node.napi.node"
+            fi
           done
 
-          # Caso 2: artifacts contendo diretamente linux-x64/, win32-x64/, etc.
-          if [ "$found" = "0" ]; then
-            for dir in prebuilds-agg/**; do
-              [ -d "$dir" ] || continue
-              # se dentro tiver subpastas de plataforma com .node, copie pra prebuilds/
-              if find "$dir" -maxdepth 2 -type f -name '*.node' | grep -q .; then
-                rsync -a "$dir"/ prebuilds/
-                found=1
-              fi
-            done
-          fi
-
-          echo "Merged prebuilds (should contain <os>-<arch>/*.node):"
+          echo "::group::Merged prebuilds (should list <os>-<arch>/node.napi.node)"
           ls -R prebuilds || true
-          test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files after merge'; exit 1; }
+          echo "::endgroup::"
+
+          # Falha se não tiver nenhum .node
+          test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files after extraction'; exit 1; }
 
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run

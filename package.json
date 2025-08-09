@@ -21,7 +21,8 @@
     "build": "node-gyp configure build",
     "prebuild": "prebuild --napi --strip",
     "fetch:vendor": "node tools/fetch-vendor.js",
-    "prepublishOnly": "npm run prebuild"
+    "prepublishOnly": "npm run prebuild",
+    "install": "node-gyp-build"
   },
   "dependencies": {
     "node-gyp-build": "^4.8.0",
