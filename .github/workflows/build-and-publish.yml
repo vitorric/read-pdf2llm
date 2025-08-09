@@ -83,7 +83,7 @@ jobs:
           echo "::group::Artifacts"
           ls -R prebuilds-agg || true
           echo "::endgroup::"
-
+      
       - name: Extract prebuild tarballs into prebuilds/ layout
         shell: bash
         run: |
@@ -133,46 +133,6 @@ jobs:
 
           echo "::group::Merged prebuilds"
           ls -al prebuilds/* || true
-          echo "::endgroup::"
-
-          # Falha se não tiver nenhum .node
-          test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files after extraction'; exit 1; }
-
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s globstar nullglob
-          mkdir -p prebuilds
-
-          echo "::group::Artifacts tree"
-          ls -R prebuilds-agg || true
-          echo "::endgroup::"
-
-          # Para cada .tar.gz gerado pelo prebuild
-          for tgz in prebuilds-agg/**/*.tar.gz prebuilds-agg/*.tar.gz; do
-            [ -f "$tgz" ] || continue
-            fname="$(basename "$tgz")"
-
-            # Extrai plataforma/arquitetura do nome do arquivo
-            # Ex.: read-pdf2llm-v1.0.7-node-v115-linux-x64.tar.gz
-            plat="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\1/')"
-            arch="$(echo "$fname" | sed -E 's/.*-(linux|darwin|win32)-(x64|arm64)\.tar\.gz/\2/')"
-
-            out="prebuilds/${plat}-${arch}"
-            mkdir -p "$out"
-
-            echo "Extracting $fname -> $out"
-            tar -xzf "$tgz" -C "$out"
-
-            # Ache o .node dentro do tar e garanta nome amigável para N-API
-            nodefile="$(find "$out" -type f -name '*.node' | head -n1 || true)"
-            if [ -n "${nodefile:-}" ]; then
-              cp -f "$nodefile" "$out/node.napi.node"
-            fi
-          done
-
-          echo "::group::Merged prebuilds (should list <os>-<arch>/node.napi.node)"
-          ls -R prebuilds || true
           echo "::endgroup::"
 
           # Falha se não tiver nenhum .node
