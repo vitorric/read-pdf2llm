@@ -44,13 +44,20 @@ jobs:
       - name: Install deps (no scripts)
         shell: bash
         run: npm install --ignore-scripts
-        
+
       - name: Debug node-addon-api include path
         shell: bash
         run: |
+          set -euxo pipefail
           node -p "require('node-addon-api').include_dir || require('node-addon-api').include"
           test -f "$(node -p "require('node-addon-api').include_dir || require('node-addon-api').include")/napi.h" && echo "napi.h OK"
 
+      - name: Debug PDFIUM_DIR
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "PDFIUM_DIR=${PDFIUM_DIR:-<unset>}"
+          test -f "$PDFIUM_DIR/include/fpdfview.h" || (echo "Missing fpdfview.h in $PDFIUM_DIR/include"; exit 1)
 
       - name: Build addon (uses PDFIUM_DIR)
         shell: bash
@@ -110,10 +117,10 @@ jobs:
       - name: Assert prebuilds in tarball
         shell: bash
         run: |
+          set -euxo pipefail
           TARBALL=$(npm pack --silent)
-          tar -tzf "$TARBALL" | sed -n 's/^package\///p' | egrep '^prebuilds/' || { echo "no prebuilds in tarball"; exit 1; }
+          tar -tzf "$TARBALL" | sed -n 's/^package\///p' | egrep '^prebuilds/' >/dev/null || { echo "no prebuilds in tarball"; exit 1; }
           rm -f "$TARBALL"
-
       - name: Write npmrc
         run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
         env:
