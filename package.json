@@ -38,9 +38,8 @@
   "files": [
     "index.js",
     "binding.gyp",
-    "build/Release/*.node",
     "prebuilds/**",
-    "tools/fetch-vendor.js",
-    "src/**"
+    "src/**",
+    "tools/fetch-vendor.js"
   ]
 }
