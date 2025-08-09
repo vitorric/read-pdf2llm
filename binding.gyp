@@ -3,13 +3,19 @@
     {
       "target_name": "read-pdf2llm",
       "sources": [ "src/read-pdf2llm.cpp" ],
+
       "include_dirs": [
-        "<!(node -p \"require('node-addon-api').include\")"
+        "<!(node -p \"require('node-addon-api').include\")",
+        "<!(node -p \"require('node-addon-api').include_dir\")"
       ],
+      "dependencies": [
+        "<!(node -p \"require('node-addon-api').gyp\")"
+      ],
+
       "defines": [ "NAPI_CPP_EXCEPTIONS" ],
       "cflags_cc": [ "-std=c++17", "-fexceptions" ],
-      "conditions": [
 
+      "conditions": [
         [ "OS=='linux'", {
           "include_dirs": [
             "<(module_root_dir)/vendor/linux-<(target_arch)/include",
