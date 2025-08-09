@@ -16,7 +16,6 @@
   "author": "Vitor Ricardo <vitorricardo@outlook.com>",
   "license": "MIT",
   "type": "commonjs",
-  "gypfile": true,
   "scripts": {
     "install": "node-gyp-build",
     "build": "node-gyp configure build",

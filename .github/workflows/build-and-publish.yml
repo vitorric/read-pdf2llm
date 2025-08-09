@@ -135,6 +135,12 @@ jobs:
           echo "--- .npmignore ---"
           cat .npmignore
 
+      - name: Remove prebuild .tar.gz payloads
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find prebuilds -type f -name '*.tar.gz' -print -delete || true
+
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
 
