@@ -35,9 +35,6 @@
   },
   "files": [
     "index.js",
-    "binding.gyp",
-    "src/**",
-    "tools/**",
     "prebuilds/**",
     "README.md",
     "LICENSE"
