@@ -25,6 +25,7 @@
     "prepublishOnly": "npm run prebuild"
   },
   "dependencies": {
+    "node-gyp-build": "^4.8.0",
     "bindings": "^1.5.0",
     "node-addon-api": "^7.0.0",
     "prebuild-install": "^7.1.3"

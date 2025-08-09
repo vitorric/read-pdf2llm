@@ -1,2 +1,1 @@
-const bindings = require('bindings');
-module.exports = bindings('read-pdf2llm');
+module.exports = require('node-gyp-build')(__dirname);
