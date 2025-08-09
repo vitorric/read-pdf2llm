@@ -29,6 +29,7 @@ jobs:
           apt-get install -y nodejs patchelf
 
       - name: Baixar PDFium (headers+libs)
+        shell: bash
         env:
           PDFIUM_DIR: ${{ github.workspace }}/pdfium
         run: |
