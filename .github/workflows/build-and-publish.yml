@@ -50,6 +50,13 @@ jobs:
       - name: Generate prebuilds (N-API)
         run: npm run prebuild
 
+      - name: Assert prebuilds exist
+        shell: bash
+        run: |
+          echo "Tree of prebuilds produced by this runner:"
+          ls -R prebuilds || true
+          test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files in prebuilds/'; exit 1; }
+
       - name: Upload prebuild artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -80,17 +87,36 @@ jobs:
       - name: Merge prebuilds into package tree
         shell: bash
         run: |
+          set -euo pipefail
           shopt -s globstar nullglob
           mkdir -p prebuilds
-          # copia tudo que estiver em */prebuilds/** para ./prebuilds/**
+          echo "Downloaded artifacts layout:"
+          ls -R prebuilds-agg || true
+
+          # Caso 1: artifacts empacotados com raiz 'prebuilds/'
+          found=0
           for f in prebuilds-agg/**/prebuilds/**; do
             dest="prebuilds/${f#*/prebuilds/}"
             mkdir -p "$(dirname "$dest")"
             cp -f "$f" "$dest"
+            found=1
           done
-          echo "::group::Merged prebuilds"
+
+          # Caso 2: artifacts contendo diretamente linux-x64/, win32-x64/, etc.
+          if [ "$found" = "0" ]; then
+            for dir in prebuilds-agg/**; do
+              [ -d "$dir" ] || continue
+              # se dentro tiver subpastas de plataforma com .node, copie pra prebuilds/
+              if find "$dir" -maxdepth 2 -type f -name '*.node' | grep -q .; then
+                rsync -a "$dir"/ prebuilds/
+                found=1
+              fi
+            done
+          fi
+
+          echo "Merged prebuilds (should contain <os>-<arch>/*.node):"
           ls -R prebuilds || true
-          echo "::endgroup::"
+          test -n "$(find prebuilds -type f -name '*.node' -print -quit)" || { echo 'No .node files after merge'; exit 1; }
 
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
