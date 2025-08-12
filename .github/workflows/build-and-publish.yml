@@ -143,13 +143,19 @@ jobs:
 
       - name: npm pack --dry-run (should list prebuilds/**)
         run: npm pack --dry-run
-
-      - name: Assert prebuilds in tarball (using npm --json)
+      - name: Assert tarball content (no install script, no binding.gyp, has prebuilds)
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           npm pack --dry-run --json > pack.json
-          node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync("pack.json","utf8"))[0]; const files=j.files.map(f=>f.path); console.log(files.join("\n")); if(!files.some(p=>p.startsWith("prebuilds/"))) { console.error("no prebuilds in tarball"); process.exit(1); }'
+          node -e 'const fs=require("fs");
+            const j=JSON.parse(fs.readFileSync("pack.json","utf8"))[0];
+            const files=j.files.map(f=>f.path);
+            const pkg=require("./package.json");
+            if(pkg.scripts && pkg.scripts.install){console.error("ERRO: script install presente");process.exit(1);}
+            if(files.includes("binding.gyp")){console.error("ERRO: binding.gyp no tarball");process.exit(1);}
+            if(!files.some(p=>p.startsWith("prebuilds/"))){console.error("ERRO: sem prebuilds no tarball");process.exit(1);}
+            console.log("OK: tarball válido");'
 
       - name: Write npmrc
         run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
