@@ -1,6 +1,6 @@
 {
   "name": "read-pdf2llm",
-  "version": "1.0.33",
+  "version": "1.0.34",
   "description": "High-performance PDF text extractor (with OCR fallback) for Node.js, optimized for LLM pipelines. Uses PDFium, Tesseract, and C++ addon.",
   "main": "index.js",
   "keywords": [
