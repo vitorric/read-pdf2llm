@@ -138,13 +138,23 @@ jobs:
             if (!files.some(x=>x.startsWith("prebuilds/"))) throw new Error("ERRO: sem prebuilds/ no tarball");
             console.log("OK: tarball válido");'
 
-      - name: Simulate install from tarball
+      - name: Build tarball
+        id: pack
+        shell: bash
         run: |
-          mkdir /tmp/test-install
-          cd /tmp/test-install
-          npm install ../read-pdf2llm-*.tgz
-          node -e 'require("read-pdf2llm"); console.log("✅ Installed and required OK")'
+          set -euxo pipefail
+          TARBALL=$(npm pack --silent)
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          ls -l "$TARBALL"
 
+      - name: Simulate install from tarball
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/test-install
+          cd /tmp/test-install
+          npm install "${{ github.workspace }}/${{ steps.pack.outputs.tarball }}"
+          node -e 'require("read-pdf2llm"); console.log("✅ Installed and required OK")'
       - name: Simulate install from GitHub
         run: |
           mkdir /tmp/test-github
