@@ -1,5 +1,7 @@
 name: test-release
 on:
+  push:
+    branches: [ "main" ]
   workflow_dispatch: {}
 
 permissions:
