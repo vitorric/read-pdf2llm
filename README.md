@@ -1,6 +1,11 @@
-# read-pdf2llm
-
+<div align="center">
+    
+# 📑 read-pdf2llm 📑
+    
 **Extração de texto de PDFs (com fallback OCR) de alta performance para Node.js, otimizado para pipelines LLM.**  
+</div>
+
+----
 
 ## Sumário
 
@@ -118,7 +123,8 @@ function readPDF2LLM(name, filePath) {
 
 > Neste benchmark, apenas comparei algumas libs existentes com funcionalidade de extração de texto em NodeJS:
 
-![benchmark libs extracao texto](./imgs/benchmark_text)
+![benchmark libs extracao texto](imgs/benchmark_text.png?no-preview=1)
+
 
 # License
 
