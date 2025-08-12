@@ -9,7 +9,7 @@
 
 **ESTOU TRABALHANDO NO BUILD**
 
-Quem quiser ver a versão que roda diretamente no docker, basta acessar [esta branch](https://github.com/vitorric/read-pdf2llm/tree/feat/build-addon).
+Quem quiser ver a versão que roda diretamente no docker, basta acessar [esta branch](https://github.com/vitorric/read-pdf2llm/tree/docker-version).
 
 # License
 
