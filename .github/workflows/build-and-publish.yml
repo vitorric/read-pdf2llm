@@ -4,7 +4,7 @@ permissions:
 
 on:
   push:
-    branches: [ "feat/build-addon" ]
+    branches: [ "main" ]
     tags: [ "v*.*.*" ]
   workflow_dispatch: {}
 
