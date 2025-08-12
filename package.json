@@ -1,13 +1,8 @@
 {
   "name": "read-pdf2llm",
-  "version": "1.0.0",
+  "version": "1.0.32",
   "description": "High-performance PDF text extractor (with OCR fallback) for Node.js, optimized for LLM pipelines. Uses PDFium, Tesseract, and C++ addon.",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "run:docker": "docker run --rm -it pdf-reader",
-    "build:docker": "docker build -t pdf-reader ."
-  },
   "keywords": [
     "pdf",
     "ocr",
@@ -21,8 +16,27 @@
   "author": "Vitor Ricardo <vitorricardo@outlook.com>",
   "license": "MIT",
   "type": "commonjs",
-  "gypfile": true,
+  "scripts": {
+    "build": "node-gyp configure build",
+    "prebuild": "prebuild --napi --strip"
+  },
   "dependencies": {
-    "node-addon-api": "^8.5.0"
-  }
+    "node-addon-api": "^7.0.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.3.1",
+    "prebuild": "^13.0.1"
+  },
+  "overrides": {
+    "prebuild": {
+      "node-gyp": "^10.2.0"
+    }
+  },
+  "files": [
+    "index.js",
+    "prebuilds/**",
+    "README.md",
+    "LICENSE"
+  ]
 }
