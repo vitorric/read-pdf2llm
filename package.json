@@ -38,5 +38,13 @@
     "prebuilds/**",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vitorric/read-pdf2llm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vitorric/read-pdf2llm/issues"
+  },
+  "homepage": "https://github.com/vitorric/read-pdf2llm#readme"
 }
