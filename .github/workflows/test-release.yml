@@ -42,6 +42,7 @@ jobs:
         run: npm install --ignore-scripts
 
       - name: Build addon (uses PDFIUM_DIR)
+        shell: bash
         env:
           PDFIUM_DIR: ${{ env.PDFIUM_DIR }}
         run: |
@@ -61,6 +62,7 @@ jobs:
           cp -f "$NODEFILE" prebuilds/linux-x64/node.napi.node
 
       - name: Bundle shared libs into prebuilds (Linux)
+        shell: bash
         env:
           PDFIUM_DIR: ${{ env.PDFIUM_DIR }}
         run: |
