@@ -1,0 +1,151 @@
+name: test-release
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  prebuild-linux:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps (Ubuntu 24.04)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y \
+            curl gnupg ca-certificates wget git python3 make g++ build-essential \
+            tesseract-ocr libtesseract-dev libleptonica-dev software-properties-common \
+            tesseract-ocr-por pkg-config patchelf
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
+
+      - name: Download PDFium (linux-x64)
+        shell: bash
+        env:
+          PDFIUM_DIR: ${{ github.workspace }}/pdfium
+        run: |
+          set -euxo pipefail
+          mkdir -p "$PDFIUM_DIR"
+          curl -L https://github.com/bblanchon/pdfium-binaries/releases/latest/download/pdfium-linux-x64.tgz -o pdfium.tgz
+          tar -xzf pdfium.tgz -C "$PDFIUM_DIR"
+          test -f "$PDFIUM_DIR/include/fpdfview.h"
+          rm -f pdfium.tgz
+          echo "PDFIUM_DIR=$PDFIUM_DIR" >> $GITHUB_ENV
+
+      - name: Install deps (no scripts)
+        run: npm install --ignore-scripts
+
+      - name: Build addon (uses PDFIUM_DIR)
+        env:
+          PDFIUM_DIR: ${{ env.PDFIUM_DIR }}
+        run: |
+          set -euxo pipefail
+          npx node-gyp configure
+          npx node-gyp build
+
+      - name: Generate prebuild (N-API)
+        run: npx prebuild --napi --strip
+
+      - name: Place .node in prebuilds/ layout
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p prebuilds/linux-x64
+          NODEFILE=$(find . -name "*.node" | head -n1)
+          cp -f "$NODEFILE" prebuilds/linux-x64/node.napi.node
+
+      - name: Bundle shared libs into prebuilds (Linux)
+        env:
+          PDFIUM_DIR: ${{ env.PDFIUM_DIR }}
+        run: |
+          set -euxo pipefail
+          chmod +x tools/bundle-linux.sh || true
+          bash tools/bundle-linux.sh
+          echo "::group::prebuilds tree"
+          find prebuilds -maxdepth 3 -type f -print || true
+          echo "::endgroup::"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilds-linux-x64
+          path: prebuilds/
+          if-no-files-found: error
+
+  release-test:
+    needs: prebuild-linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prebuilds-linux-x64
+          path: prebuilds/
+
+      - name: Remove prebuild .tar.gz payloads
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find prebuilds -type f -name '*.tar.gz' -print -delete || true
+          echo "::group::prebuilds after cleanup"
+          find prebuilds -maxdepth 3 -type f -print || true
+          echo "::endgroup::"
+
+      - name: Minimal .npmignore
+        shell: bash
+        run: |
+          cat > .npmignore <<'EOF'
+          node_modules
+          .git
+          .github
+          *.log
+          npm-debug.log*
+          EOF
+          cat .npmignore
+
+      - name: Sanity package.json
+        shell: bash
+        run: |
+          node -e 'const p=require("./package.json");
+            if (p.scripts && p.scripts.install) { throw new Error("scripts.install presente"); }
+            if (p.gypfile) { throw new Error("gypfile=true presente"); }
+            if (!Array.isArray(p.files) || !p.files.some(x=>/^prebuilds\/\*\*/.test(x))) { throw new Error(`package.json files não inclui "prebuilds/**"`); }
+            console.log("package.json OK");'
+
+      - name: npm pack --dry-run (inspect)
+        run: npm pack --dry-run
+
+      - name: Assert tarball content
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm pack --dry-run --json > pack.json
+          node -e 'const fs=require("fs");
+            const p=require("./package.json");
+            const j=JSON.parse(fs.readFileSync("pack.json","utf8"))[0];
+            const files=j.files.map(f=>f.path);
+            console.log("Files in tarball:", files.length);
+            if (p.scripts && p.scripts.install) throw new Error("ERRO: scripts.install presente");
+            if (files.includes("binding.gyp")) throw new Error("ERRO: binding.gyp no tarball");
+            if (!files.some(x=>x.startsWith("prebuilds/"))) throw new Error("ERRO: sem prebuilds/ no tarball");
+            console.log("OK: tarball válido");'
+
+      - name: Simulate install from tarball
+        run: |
+          mkdir /tmp/test-install
+          cd /tmp/test-install
+          npm install ../read-pdf2llm-*.tgz
+          node -e 'require("read-pdf2llm"); console.log("✅ Installed and required OK")'
+
+      - name: Simulate install from GitHub
+        run: |
+          mkdir /tmp/test-github
+          cd /tmp/test-github
+          npm install github:vitorric/read-pdf2llm
+          node -e 'require("read-pdf2llm"); console.log("✅ Installed from GitHub OK")'
