@@ -4,7 +4,7 @@ permissions:
 
 on:
   push:
-    branches: [ "main2" ]
+    branches: [ "main" ]
     tags: [ "v*.*.*" ]
   workflow_dispatch: {}
 
