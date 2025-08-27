@@ -58,7 +58,7 @@ services:
       - NODE_ENV=development
       - OLLAMA_BASE_URL=http://ollama:11434
       - NLP_MODEL=gemma3:4b     # 👈 usa o mesmo modelo do loader
-      - API_KEY=AIzaSyBHfFlMpV94JMq28_ff55DvbD_inE0lBvM
+      - API_KEY=GEMINI_API_KEY
       - CHOKIDAR_USEPOLLING=true
       - CHOKIDAR_INTERVAL=300
     ports:
