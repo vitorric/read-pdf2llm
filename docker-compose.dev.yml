@@ -1,0 +1,74 @@
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=30m      # mantém o modelo carregado
+      - OLLAMA_NUM_PARALLEL=1      # evita competir CPU
+    volumes:
+      - ollama_models:/root/.ollama 
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+  
+  # Loader robusto via HTTP (sem docker-in-docker)
+  ollama-model-loader:
+    image: curlimages/curl:8.10.1
+    container_name: ollama-model-loader
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_MODEL: "gemma3:4b"     # pode trocar por gemma3:4b, deepseek-coder:1.3b etc.
+    command:
+      - /bin/sh
+      - -lc
+      - >
+        set -e;
+        echo "⏳ waiting Ollama...";
+        until curl -sf http://ollama:11434/api/tags >/dev/null; do sleep 2; done;
+        echo "📥 pulling $${OLLAMA_MODEL}...";
+        curl --fail -sS -H 'Content-Type: application/json'
+        -d "{\"model\":\"$${OLLAMA_MODEL}\"}"
+        http://ollama:11434/api/pull;
+        echo "🔥 warmup...";
+        curl --fail -sS -H 'Content-Type: application/json'
+        -d "{\"model\":\"$${OLLAMA_MODEL}\",\"prompt\":\"ping\",\"stream\":false,\"options\":{\"num_predict\":1}}"
+        http://ollama:11434/api/generate;
+        echo "✅ ready";
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: my-nest-api-dev
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-model-loader:
+        condition: service_completed_successfully  # 👈 espera o pull terminar
+    environment:
+      - NODE_ENV=development
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - NLP_MODEL=gemma3:4b     # 👈 usa o mesmo modelo do loader
+      - API_KEY=AIzaSyBHfFlMpV94JMq28_ff55DvbD_inE0lBvM
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=300
+    ports:
+      - "3100:3100"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: sh -lc "npm ci --ignore-scripts && npx node-gyp rebuild && npm run start:dev"
+    restart: unless-stopped
+
+
+volumes:
+  ollama_models: {}

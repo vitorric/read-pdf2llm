@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ./ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # (Opcional) loader que baixa o modelo assim que o ollama estiver ok
+  ollama-model-loader:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh","-c"]
+    command: |
+      until curl -sf http://ollama:11434/api/tags >/dev/null; do sleep 2; done
+      echo '{"name":"llama3.2:1b"}' | curl -s -X POST http://ollama:11434/api/pull -d @- -H 'Content-Type: application/json'
+      echo "✅ pulled via HTTP"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: my-nest-api
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - OLLAMA_BASE_URL=http://ollama:11434   # 👈 chave certa
+      - NLP_MODEL=llama3.2:1b        # (ou o modelo que você quer)
+    ports:
+      - "3000:3000"
+    # Se precisar acessar o socket do Docker de dentro da API (geralmente não precisa)
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
