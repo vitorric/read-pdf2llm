@@ -8,7 +8,6 @@ export enum AppErrorStatusCode {
 export class AppError extends Error {
   readonly name: string;
   readonly statusCode: AppErrorStatusCode;
-  readonly code: string;
 
   constructor(
     name: string,
@@ -17,7 +16,7 @@ export class AppError extends Error {
   ) {
     super(message);
 
-    this.name = `SA_${name}`;
+    this.name = name;
     this.statusCode = statusCode;
     Error.captureStackTrace(this, this.constructor);
   }

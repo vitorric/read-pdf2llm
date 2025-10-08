@@ -25,7 +25,7 @@ export class ChatCreateUseCase
       callback: (val) => pages.push(val),
     });
 
-    const joined = pages.join('\n\n').slice(0, 8000); // limite simples
+    const joined = pages.join('\n\n');
     const answer = await this.aiAskService.ask(joined);
     return { answer };
   }

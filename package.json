@@ -12,7 +12,7 @@
     "start": "nest start",
     "start:dev": "env-cmd -f .env.local nest start --watch",
     "start:prod": "node dist/main",
-    "start:docker": "docker compose -f docker-compose.dev.yml up -d --build --force-recreate && docker compose -f docker-compose.dev.yml logs -f api"
+    "start:docker": "docker compose -f docker-compose.yml up -d --build --force-recreate && docker compose -f docker-compose.yml logs -f api"
   },
   "dependencies": {
     "@google/genai": "^1.15.0",

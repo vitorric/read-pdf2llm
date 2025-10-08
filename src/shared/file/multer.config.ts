@@ -31,7 +31,7 @@ export function multerUploadConfig() {
       }
     },
     limits: {
-      fileSize: 1 * 1024 * 1024, // 5MB
+      fileSize: 1 * 1024 * 1024,
     },
   };
 }
