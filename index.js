@@ -38,18 +38,3 @@ function readPDF2LLM(name, filePath) {
     });
 }
 
-
-(async () => {
-    const inputDir = process.argv[2] || './pdfs';
-
-    const files = fs.readdirSync(inputDir).filter(f => f.endsWith('.pdf'));
-
-    if (!files.length) {
-        console.error("❌ Nenhum arquivo PDF encontrado na pasta.");
-        process.exit(1);
-    }
-
-    for (const file of files) {
-        await readPDF2LLM(file, path.join(inputDir, file));
-    }
-})();
